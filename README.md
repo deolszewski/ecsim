@@ -1,2 +1,2 @@
 # ecsim
-Ecosystem simulation written purely in Python for learning purposes.
+Side personal project, evolutionary behaviours simulation written purely in Python, work on README.md in progress.
