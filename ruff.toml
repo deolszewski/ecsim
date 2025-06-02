@@ -1,0 +1,15 @@
+
+target-version = "py313"
+fix = true
+select = ["ALL",]
+ignore = [
+    "CPY001",
+    "D100",
+    "S311",
+    "D101",
+    "D102",
+    "D107",
+]
+
+[lint]
+extend-safe-fixes = ["ANN001","ANN201", "ANN204"]
