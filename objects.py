@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 
 
-@dataclass  # TODO Move to simulation.py?
+@dataclass  # TODO Move Population to simulation.py?
 class Population:
     general: list
 
@@ -142,22 +142,11 @@ class Creature(Object):
         self.is_alive: bool = True
 
     def _calculate_sight(self, population: Population) -> Population:
-        creatures = [
+        objs = [
             obj
-            for obj in population.creatures
+            for obj in population.general
             if np.hypot(obj.x - self.x, obj.y - self.y) <= self.SIGHT_RANGE
         ]
-        plants = [
-            obj
-            for obj in population.plants
-            if np.hypot(obj.x - self.x, obj.y - self.y) <= self.SIGHT_RANGE
-        ]
-        consumables = [
-            obj
-            for obj in population.consumables
-            if np.hypot(obj.x - self.x, obj.y - self.y) <= self.SIGHT_RANGE
-        ]
-        objs = creatures + plants + consumables
         objs = sorted(
             objs,
             key=self._distance,
