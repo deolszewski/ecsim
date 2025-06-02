@@ -11,7 +11,7 @@ class EcSim:
         frame = 0
         while True:
             self.simulation.update_environment()
-            self.visualizer.update_loop(
+            self.visualizer.update(
                 population=self.simulation.environment.population,
                 frame=frame,
             )
