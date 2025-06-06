@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import random
+from collections import defaultdict
 from dataclasses import dataclass
 
 import numpy as np
 
 
 @dataclass  # TODO Move Population to simulation.py?
-class Population:
+class Population:  # TODO Inefficient property calling?
     general: list
+
+    def __post_init__(self):
+        self.categories: defaultdict = defaultdict(list)
 
     @property
     def creatures(self) -> list:
@@ -30,21 +34,54 @@ class Population:
     def herbivores(self) -> list:
         return [obj for obj in self.creatures if obj.DIET == "herbivore"]
 
+    @property
+    def corpses(self) -> list:
+        return [obj for obj in self.general if isinstance(obj, Corpse)]
+
+    def population_in_radius(
+        self,
+        center: Transform,
+        radius: float,
+    ) -> np.typing.NDArray:
+        return np.array([
+            obj
+            for obj in self.general
+            if np.hypot(obj.x - center.pos_x, obj.y - center.pos_y) <= radius
+        ])  # Euclidean range
+
+
+@dataclass
+class Transform:
+    pos_x: float = 0.0
+    pos_y: float = 0.0
+
+    rot_x: float = 0.0
+    rot_y: float = 0.0
+
+    scale_x: float = 0.0
+    scale_y: float = 0.0
+
 
 @dataclass
 class Object:
+    CATEGORY: str
+
     x: float
     y: float
+    caloric_value: float
 
 
-@dataclass
+@dataclass(frozen=True)
 class Action:
     movement: tuple[float, float] = (0.0, 0.0)
     type: str = ""
     payload: Creature | Plant | Consumable | None = None
 
 
-# TODO: class Corpse(Object):
+@dataclass
+class Corpse(Object):
+    def update(self, population: Population) -> Action:
+        return Action()
 
 
 @dataclass
@@ -63,7 +100,7 @@ class Consumable(Object):
 
 class Plant(Object):
     def __init__(self, x: float, y: float) -> None:
-        super().__init__(x, y)
+        super().__init__(CATEGORY="PLANT", x=x, y=y, caloric_value=1)
         # Genome / Specie-dependent in the future
         self.MAX_YIELD: int = random.randint(3, 15)
         self.CHILD_CALORIC_VALUE: float = 25
@@ -84,6 +121,7 @@ class Plant(Object):
                 y=random.randint(-1, 1) + self.y,
                 parent=self,
                 caloric_value=self.CHILD_CALORIC_VALUE,
+                CATEGORY="consumable",
             )
         return None
 
@@ -113,9 +151,9 @@ class HormonalSystem:
         return min(max(eating_urge, 0), 1)  # 0-1
 
 
-class Creature(Object):
+class Creature(Object):  # TODO Decouple Sensory System
     def __init__(self, x: float, y: float, diet: str, MAX_ATP: float) -> None:
-        super().__init__(x, y)
+        super().__init__(CATEGORY="creature", x=x, y=y, caloric_value=500)
 
         # Genome / Specie-dependent in the future
         self.MOVEMENT_SPEED: float = 10.0
@@ -131,7 +169,7 @@ class Creature(Object):
         self.caloric_value: float = 500
 
         # Dynamic attributes
-        self.ATP: float = self.MAX_ATP * 0.9  # TODO Lower case!
+        self.atp: float = self.MAX_ATP * 0.9
         self.reproduction_timer: int = 100
 
         # Data attributes
@@ -175,27 +213,36 @@ class Creature(Object):
             x_movement = -1
         return (x_movement, y_movement)
 
+    def _calculate_movement(
+        self,
+        obj: Object,
+        factor: int,
+    ) -> np.typing.NDArray[np.float32]:
+        direction = np.array(
+            [obj.x - self.x, obj.y - self.y],
+            dtype=np.float32,
+        )  # TEMP [1, 2]
+        norm: np.float32 = np.linalg.norm(
+            direction,
+        )  # Pythagoeran theorem # TEMP ar 1.6
+        return (
+            direction / norm * factor  # Direct movement
+            if norm > 0  # If not, position is equal
+            else np.array(
+                self._calculate_wander(),
+                dtype=np.float32,
+            )  # TODO Convert arrays to np.array
+        )
+
     @staticmethod
     def _calculate_wander() -> tuple[float, float]:
         return (random.randint(-1, 1), random.randint(-1, 1))
 
-    def _calculate_escape(self, obj: Object) -> tuple[float, float]:
-        x_movement, y_movement = 0, 0
-        if obj.x >= self.x:
-            x_movement = -1
-        elif obj.x < self.x:
-            x_movement = 1
-        if obj.y >= self.y:
-            y_movement = -1
-        elif obj.y < self.y:
-            y_movement = 1
-        return (x_movement, y_movement)
-
     def _can_reproduce(self) -> bool:
-        if self.ATP < self.REPRODUCTION_ATP_TRESHOLD or self.reproduction_timer > 0:
+        if self.atp < self.REPRODUCTION_ATP_TRESHOLD or self.reproduction_timer > 0:
             return False
         chance = 0.05 + 0.15 * (
-            (self.ATP - self.REPRODUCTION_ATP_TRESHOLD) / 35
+            (self.atp - self.REPRODUCTION_ATP_TRESHOLD) / 35
         )  # from 5% to 20%
         return random.random() < chance
 
@@ -206,8 +253,8 @@ class Creature(Object):
         # self.hormones.gherlin *= 0.01
         return bool(
             random.random() < self.eating_urge
-            and self.diet_in_sight[0].x - 2 < self.x < self.diet_in_sight[0].x + 2
-            and self.diet_in_sight[0].y - 2 < self.y < self.diet_in_sight[0].y + 2,
+            and self._distance(obj=self.diet_in_sight[0])
+            < 2,  # TODO Remove Magic Value!
         )  # probability rising with eating_urge
 
     def _can_goto(self) -> bool:
@@ -236,13 +283,16 @@ class Creature(Object):
         return self.diet_in_sight[0]  # Pick nearest
 
     def _action(self) -> Action:
-        if self.ATP <= 0:
+        if self.atp <= 0:
             return Action(type="die")
         if self._should_escape(
             self.sight_population.carnivores,
-        ):  # TODO !!!: implement self._should_hunt() for predators(depending on hunger, factor)
+        ):  # TODO: implement self._should_hunt() for predators(depending on hunger, factor)
             return Action(
-                movement=self._calculate_escape(self.sight_population.carnivores[0]),
+                movement=self._calculate_movement(
+                    obj=self.sight_population.carnivores[0],
+                    factor=-1,
+                ),
                 type="escape",
             )
         if self._can_reproduce():
@@ -250,8 +300,11 @@ class Creature(Object):
         if self._can_eat():
             return Action(type="eat", payload=self.diet_in_sight[0])
         if self._can_goto():
-            self.goal = self._calculate_goal()
-            return Action(movement=self._calculate_path(), type="goto")
+            self.goal = self._calculate_goal()  # TODO cached or live goal?
+            return Action(
+                movement=self._calculate_movement(obj=self.goal, factor=1),
+                type="goto",
+            )
         return Action(movement=self._calculate_wander(), type="wander")
 
     def consume(self, obj: Creature | Consumable) -> float:
@@ -259,17 +312,17 @@ class Creature(Object):
 
         if hunger_strength < self.MAX_HUNGER_NIBBLE:
             # Nibble
-            calories_eaten = min((self.MAX_ATP - self.ATP) * 0.4, obj.caloric_value)
-            self.ATP = min(self.MAX_ATP, calories_eaten + self.ATP)
+            calories_eaten = min((self.MAX_ATP - self.atp) * 0.4, obj.caloric_value)
+            self.atp = min(self.MAX_ATP, calories_eaten + self.atp)
         elif hunger_strength < self.MAX_HUNGER_EAT:
             # Eat normally
-            calories_eaten = min((self.MAX_ATP - self.ATP) * 0.9, obj.caloric_value)
-            self.ATP = min(self.MAX_ATP, calories_eaten + self.ATP)
+            calories_eaten = min((self.MAX_ATP - self.atp) * 0.9, obj.caloric_value)
+            self.atp = min(self.MAX_ATP, calories_eaten + self.atp)
         else:
             # Overeat
-            calories_eaten = min((self.MAX_ATP - self.ATP) * 1.5, obj.caloric_value)
-            self.ATP = min(self.MAX_ATP, calories_eaten + self.ATP)
-        # print(f"consumed: {calories_eaten}, ATP: {self.ATP}") TODO LOGGING!
+            calories_eaten = min((self.MAX_ATP - self.atp) * 1.5, obj.caloric_value)
+            self.atp = min(self.MAX_ATP, calories_eaten + self.atp)
+        # print(f"consumed: {calories_eaten}, ATP: {self.atp}") TODO LOGGING!
         return calories_eaten
 
     def consumed(self, calories_consumed: float) -> bool:
@@ -278,7 +331,7 @@ class Creature(Object):
         return self.caloric_value <= 0
 
     def reproduce(self) -> Creature:
-        self.ATP -= 35  # REPR_COST
+        self.atp -= 35  # REPR_COST
         self.reproduction_timer = 60 * 10  # REPR_COOLDOWN
         spawn_offset = [-2, -1, 1, 2]
         return Creature(
@@ -293,12 +346,9 @@ class Creature(Object):
             return Action(type="dead")
         self.sight_population = self._calculate_sight(population=population)
         self.diet_in_sight = self._update_diet()
-        self.eating_urge = self.hormones.update(current_atp=self.ATP, max_atp=100)
+        self.eating_urge = self.hormones.update(current_atp=self.atp, max_atp=100)
         action = self._action()
-        self.ATP -= self.hormones.METABOLISM
+        self.atp -= self.hormones.METABOLISM
         if self.reproduction_timer > 0:
             self.reproduction_timer -= 1
         return action
-
-
-# Passionate Python

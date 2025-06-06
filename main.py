@@ -1,5 +1,5 @@
 from simulation import Simulation
-from visualizer import Visualizer
+from visualization import Visualizer
 
 
 class EcSim:

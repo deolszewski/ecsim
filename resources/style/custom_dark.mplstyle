@@ -1,0 +1,45 @@
+figure.facecolor: 1c1f1f
+font.size: 12.0
+
+axes.titlecolor: c4c4c4
+axes.titlesize: x-large
+
+axes.facecolor: 202424
+axes.edgecolor: white
+
+axes.labelsize: large
+axes.labelcolor: 555555
+axes.linewidth: 0
+
+lines.linewidth: 0.5
+lines.solid_capstyle: butt
+
+legend.frameon: False
+legend.fancybox: False
+legend.numpoints: 1
+legend.scatterpoints: 1
+legend.shadow: True
+
+patch.facecolor: 348ABD
+
+xtick.color: 555555
+xtick.direction: out
+
+ytick.color: 555555
+ytick.direction: out
+
+font.family: serif
+font.serif: Times New Roman
+text.color: 0.85
+
+axes.axisbelow: True
+axes.grid: True
+grid.linestyle: -
+grid.color: 0.19
+
+xtick.major.size: 0
+ytick.major.size: 0
+xtick.minor.size: 0
+ytick.minor.size: 0
+
+legend.loc: dfsdfsfd

@@ -8,3 +8,7 @@ class Parameters:
     STARTING_CREATURES: Final[int] = 3
     ENV_WIDTH: Final[int] = 100
     ENV_HEIGHT: Final[int] = 100
+
+
+class UIParams:
+    pass
