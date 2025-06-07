@@ -1,7 +1,8 @@
 import random
 
-from constants import Parameters
-from objects import Action, Creature, Plant, Population
+from config import Parameters
+
+from .objects import Action, Creature, Plant, Population
 
 
 class Environment:
@@ -54,9 +55,10 @@ class Simulation:
         match action.type:
             case "die":
                 self.environment.population.general.remove(obj)
+                self.environment.population.general.append(action.payload)
             case "reproduce":  # Also counts for Plant crops
                 self.environment.population.general.append(action.payload)
-            case "wander" | "goto" | "escape":
+            case "wander" | "goto" | "escape" | "hunt":
                 x_movement, y_movement = action.movement
                 if 0 < obj.x + x_movement < Parameters.ENV_WIDTH:
                     obj.x += x_movement

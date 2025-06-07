@@ -11,7 +11,7 @@ import numpy as np
 class Population:  # TODO Inefficient property calling?
     general: list
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.categories: defaultdict = defaultdict(list)
 
     @property
@@ -75,13 +75,17 @@ class Object:
 class Action:
     movement: tuple[float, float] = (0.0, 0.0)
     type: str = ""
-    payload: Creature | Plant | Consumable | None = None
+    payload: Creature | Plant | Consumable | Corpse | None = None
 
 
 @dataclass
 class Corpse(Object):
     def update(self, population: Population) -> Action:
         return Action()
+
+    def consumed(self, calories_consumed: float) -> bool:
+        self.caloric_value -= calories_consumed
+        return self.caloric_value <= 0
 
 
 @dataclass
@@ -90,7 +94,6 @@ class Consumable(Object):
     caloric_value: float
 
     def consumed(self, calories_consumed: float) -> bool:
-        self.is_alive = False
         self.caloric_value -= calories_consumed
         return self.caloric_value <= 0
 
@@ -143,10 +146,10 @@ class HormonalSystem:
 
     def update(self, current_atp: float, max_atp: float) -> float:
         self.leptin = self.LEPTIN_SENSITIVITY * current_atp
-        self.gherlin = self.GHERLIN_BASE + (1 - current_atp / max_atp)
+        self.gherlin = self.GHERLIN_BASE + (max_atp / current_atp)
 
         eating_urge = 1 / (
-            1 + np.exp(-2 * (self.gherlin - self.leptin))
+            1 + np.exp(-1.2 * (self.gherlin - self.leptin))
         )  # TODO Exponentials
         return min(max(eating_urge, 0), 1)  # 0-1
 
@@ -160,16 +163,17 @@ class Creature(Object):  # TODO Decouple Sensory System
         self.SIGHT_RANGE: float = 20.0
         self.MAX_HUNGER_NIBBLE = 0.3
         self.MAX_HUNGER_EAT = 0.7
-        self.REPRODUCTION_ATP_TRESHOLD = 65
         self.MAX_ATP: float = MAX_ATP
+        self.REPRODUCTION_ATP_TRESHOLD = 0.8 * self.MAX_ATP
         self.DIET: str = diet
         self.threat_factor: float = 1  # TODO make it dependent on its senses? + genome
         self.hormones: HormonalSystem = HormonalSystem()
         # Dependent on size, MAX_ATP, etc.
-        self.caloric_value: float = 500
+        self.weight = 1
+        self.caloric_value: float = self.weight * 500
 
         # Dynamic attributes
-        self.atp: float = self.MAX_ATP * 0.9
+        self.atp: float = self.MAX_ATP * 0.75
         self.reproduction_timer: int = 100
 
         # Data attributes
@@ -194,45 +198,24 @@ class Creature(Object):  # TODO Decouple Sensory System
     def _update_diet(self) -> list[Creature,]:
         match self.DIET:
             case "carnivore":
-                return self.sight_population.herbivores
+                return self.sight_population.herbivores + self.sight_population.corpses
             case "herbivore":
                 return self.sight_population.consumables
             case _:
                 return []
 
-    def _calculate_path(self) -> tuple[float, float]:
-        x_movement = 0
-        y_movement = 0
-        if self.goal.y > self.y:
-            y_movement = 1
-        elif self.goal.y < self.y:
-            y_movement = -1
-        if self.goal.x > self.x:
-            x_movement = 1
-        elif self.goal.x < self.x:
-            x_movement = -1
-        return (x_movement, y_movement)
-
     def _calculate_movement(
         self,
         obj: Object,
         factor: int,
-    ) -> np.typing.NDArray[np.float32]:
-        direction = np.array(
-            [obj.x - self.x, obj.y - self.y],
-            dtype=np.float32,
-        )  # TEMP [1, 2]
-        norm: np.float32 = np.linalg.norm(
-            direction,
-        )  # Pythagoeran theorem # TEMP ar 1.6
-        return (
-            direction / norm * factor  # Direct movement
-            if norm > 0  # If not, position is equal
-            else np.array(
-                self._calculate_wander(),
-                dtype=np.float32,
-            )  # TODO Convert arrays to np.array
-        )
+    ) -> tuple[float, float]:
+        direction = np.array([obj.x - self.x, obj.y - self.y], dtype=float)
+        norm = float(np.linalg.norm(direction))  # Pythagoeran theorem
+
+        if norm > 0:
+            result = direction / norm * factor
+            return float(result[0]), float(result[1])
+        return self._calculate_wander()
 
     @staticmethod
     def _calculate_wander() -> tuple[float, float]:
@@ -242,7 +225,8 @@ class Creature(Object):  # TODO Decouple Sensory System
         if self.atp < self.REPRODUCTION_ATP_TRESHOLD or self.reproduction_timer > 0:
             return False
         chance = 0.05 + 0.15 * (
-            (self.atp - self.REPRODUCTION_ATP_TRESHOLD) / 35
+            (self.atp - self.REPRODUCTION_ATP_TRESHOLD)
+            / (self.MAX_ATP - self.REPRODUCTION_ATP_TRESHOLD)
         )  # from 5% to 20%
         return random.random() < chance
 
@@ -279,12 +263,27 @@ class Creature(Object):  # TODO Decouple Sensory System
         threat = min(1 / (1 + 10 * (distance_normalized) ** 3), 0.99)  # Rapid increase
         return random.random() < threat
 
+    def _should_hunt(self, herbivores: list[Creature,]) -> bool:
+        if not herbivores or self.DIET == "herbivore" or self.diet_in_sight:
+            return False
+        return (
+            bool(herbivores) and random.random() < self.eating_urge
+        )  # Chance increasing with urge, change to hunger_strength
+
     def _calculate_goal(self) -> Creature | Consumable:
         return self.diet_in_sight[0]  # Pick nearest
 
     def _action(self) -> Action:
         if self.atp <= 0:
-            return Action(type="die")
+            return Action(
+                type="die",
+                payload=Corpse(
+                    CATEGORY="corpse",
+                    x=self.x,
+                    y=self.y,
+                    caloric_value=self.caloric_value,
+                ),
+            )
         if self._should_escape(
             self.sight_population.carnivores,
         ):  # TODO: implement self._should_hunt() for predators(depending on hunger, factor)
@@ -305,9 +304,17 @@ class Creature(Object):  # TODO Decouple Sensory System
                 movement=self._calculate_movement(obj=self.goal, factor=1),
                 type="goto",
             )
+        if self._should_hunt(self.sight_population.herbivores):
+            return Action(
+                movement=self._calculate_movement(
+                    obj=self.sight_population.herbivores[0],
+                    factor=1,
+                ),
+                type="hunt",
+            )
         return Action(movement=self._calculate_wander(), type="wander")
 
-    def consume(self, obj: Creature | Consumable) -> float:
+    def consume(self, obj: Consumable | Corpse) -> float:
         hunger_strength: float = self.hormones.gherlin - self.hormones.leptin
 
         if hunger_strength < self.MAX_HUNGER_NIBBLE:
@@ -342,11 +349,12 @@ class Creature(Object):  # TODO Decouple Sensory System
         )  # Spawn child with an offset
 
     def update(self, population: Population) -> Action:
-        if not self.is_alive:
-            return Action(type="dead")
         self.sight_population = self._calculate_sight(population=population)
         self.diet_in_sight = self._update_diet()
-        self.eating_urge = self.hormones.update(current_atp=self.atp, max_atp=100)
+        self.eating_urge = self.hormones.update(
+            current_atp=self.atp,
+            max_atp=self.MAX_ATP,
+        )
         action = self._action()
         self.atp -= self.hormones.METABOLISM
         if self.reproduction_timer > 0:

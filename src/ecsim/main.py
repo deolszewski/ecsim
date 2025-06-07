@@ -1,17 +1,17 @@
+from render import Render
 from simulation import Simulation
-from visualization import Visualizer
 
 
 class EcSim:
     def __init__(self) -> None:
-        self.visualizer = Visualizer()
+        self.render = Render()
         self.simulation = Simulation()
 
     def main(self) -> None:
         frame = 0
         while True:
             self.simulation.update_environment()
-            self.visualizer.update(
+            self.render.update(
                 population=self.simulation.environment.population,
                 frame=frame,
             )

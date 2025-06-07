@@ -5,56 +5,26 @@ import tkinter as tk
 import matplotlib.pyplot as plt
 import numpy as np
 import pygame
+from config import Parameters
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+from simulation.objects import Population
 
-from constants import Parameters
-from objects import Population
-from window import Window
-
-WHITE = (255, 255, 255)  # TODO Convert all to HEX, remove color constants
-RED = (255, 0, 0)
-GREEN = (0, 128, 0)
-VIOLET = (127, 0, 255)
-DARK_GRAY = (63, 63, 63)
-BLUE = (0, 0, 255)
+from .statistics import Statistics
+from .window import Window
 
 
-class Statistics:
-    def __init__(self) -> None:
-        self.frame: int = 0
-        self.population: Population = None
-
-        self.creatures_ot: list = []
-        self.herbivores_ot: list = []
-        self.carnivores_ot: list = []
-        self.eating_urge_ot: list = []
-        self.gherlin_ot: list = []
-        self.leptin_ot: list = []
-        self.atp_ot: list = []
-
-    def update(self, selected, population: Population, frame: int) -> None:
-        self.population = population
-        self.frame = frame
-        self.carnivores_ot.append(len(population.carnivores))
-        self.herbivores_ot.append(len(population.herbivores))
-        self.creatures_ot.append(len(population.creatures))
-        self.eating_urge_ot.append(population.general[0].eating_urge)
-        self.gherlin_ot.append(population.general[0].hormones.gherlin)
-        self.leptin_ot.append(population.general[0].hormones.leptin)
-        self.atp_ot.append(population.general[0].atp)
-
-
-class Visualizer:
+class Render:
     def __init__(self) -> None:
         self.FPS: float = 30.0
+        self.selected_obj_index = 0
 
-        self.root = Window()  # Tk window
+        self.root = Window(event_callback=self._handle_event)  # Tk window
         self.statistics = Statistics()
         self.figure, self.axs = self.__init_matplot()
 
-        self.SCALE = self.root.HEIGHT / Parameters.ENV_HEIGHT  # for now x*x
+        self.SCALE = self.root.HEIGHT / Parameters.ENV_HEIGHT - 1  # for now x*x
 
         self.__init_matplot_tk()
         self.pg_screen, self.clock = self.__init_pygame()
@@ -133,14 +103,14 @@ class Visualizer:
         for creature in self.statistics.population.herbivores:
             pygame.draw.circle(
                 self.pg_screen,
-                BLUE,
+                "#4287f5",
                 (int(creature.x * self.SCALE), int(creature.y * self.SCALE)),
                 self.SCALE,
             )  # TODO creature.size
         for creature in self.statistics.population.carnivores:
             pygame.draw.circle(
                 self.pg_screen,
-                RED,
+                "#f54242",
                 (int(creature.x * self.SCALE), int(creature.y * self.SCALE)),
                 self.SCALE,
             )
@@ -154,17 +124,57 @@ class Visualizer:
         for consumable in self.statistics.population.consumables:
             pygame.draw.circle(
                 self.pg_screen,
-                VIOLET,
+                "#952aad",
                 (int(consumable.x * self.SCALE), int(consumable.y * self.SCALE)),
                 self.SCALE,
             )
+
+        for corpse in self.statistics.population.corpses:
+            pygame.draw.circle(
+                self.pg_screen,
+                "#9c9c9c",
+                (int(corpse.x * self.SCALE), int(corpse.y * self.SCALE)),
+                self.SCALE,
+            )
+        # Selected object
+        pygame.draw.circle(
+            self.pg_screen,
+            "#ff9838",
+            (
+                int(
+                    self.statistics.population.creatures[self.selected_obj_index].x
+                    * self.SCALE,
+                ),
+                int(
+                    self.statistics.population.creatures[self.selected_obj_index].y
+                    * self.SCALE,
+                ),
+            ),
+            self.SCALE,
+        )
         pygame.display.flip()
 
     def _update_values(self) -> None:
         self.FPS = self.root.fps_slider.get()
 
+    def _handle_event(self, event_type, *args) -> None:
+        match event_type:
+            case "next_object":
+                self.statistics.reset_selected()
+                if (
+                    len(self.statistics.population.creatures) - 1
+                    >= self.selected_obj_index + 1
+                ):
+                    self.selected_obj_index += 1
+                else:
+                    self.selected_obj_index = 0
+
     def update(self, population: Population, frame: int) -> None:
-        self.statistics.update(selected="", population=population, frame=frame)
+        self.statistics.update(
+            selected_index=self.selected_obj_index,
+            population=population,
+            frame=frame,
+        )
         self._update_pygame()
         if frame % self.FPS == 0:  # Plot refresh per 1s
             self._update_matplot()
