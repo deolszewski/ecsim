@@ -1,2 +1,1 @@
-# ecsim
-Personal project, evolutionary behaviours simulation written purely in Python, work on README.md in progress.
+Evolutionary behaviour simulation of autonomous entities written purely in Python, work on README.md in progress.
