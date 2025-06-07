@@ -1,0 +1,29 @@
+[project]
+name = "ecsim"
+description = "Evolutionary behavior simulation of autonomous entities"
+version = "0.2.1"
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "pygame",
+]
+requires-python = ">=3.12"
+authors = [
+  {name = "Dominik Olszewski", email = "do@deolszewski.eu"},
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Education",
+    "Natural Language :: English",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Framework :: Matplotlib",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+]
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+
+[project.urls]
+Repository = "https://github.com/deolszewski/ecsim.git"
